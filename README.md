@@ -2,7 +2,7 @@
 
 An exploratory data analysis and customer segmentation project using **Python** and **K-Means clustering**. The notebook investigates customer demographics, household information, product spending, purchasing channels, and campaign responses, then explores whether customers can be grouped by similar recorded characteristics.
 
-> **Important:** The current clustering results are exploratory, not validated customer personas. The notebook calculates a standardized dataset but passes the unscaled data to t-SNE and K-Means. Consequently, high-magnitude numeric fields and the customer ID can dominate the clusters. Review the limitations and recommendations below before interpreting or using the segments.
+> **Important:** The clustering results are exploratory, not validated customer personas. The notebook now excludes the customer ID, imputes missing values, one-hot encodes nominal categories, robust-scales numeric fields, and uses the same prepared features for t-SNE and K-Means. The segments still need stability checks and business validation before they can support customer targeting.
 
 ## Project objectives
 
@@ -39,12 +39,12 @@ The data file is included in this project under `data/`. The notebook finds it u
 The analysis in [`main.ipynb`](./main.ipynb) follows these steps:
 
 1. **Load and inspect the data** using the table dimensions, column types, summary statistics, missing-value checks, and unique-value counts.
-2. **Handle missing records.** The dataset contains 24 missing values in `Income`; dropping incomplete rows leaves 2,216 records.
-3. **Prepare fields.** The notebook splits the customer registration date into day, month, and year, removes the original date and two constant-valued columns, and encodes object-valued columns.
-4. **Explore the data** with category counts, campaign-response count plots, and a correlation heatmap.
-5. **Create a scaled dataset** with `StandardScaler`, and use t-SNE to visualize the customers in two dimensions.
-6. **Compare candidate cluster counts** using the K-Means elbow method and inertia.
-7. **Fit a five-cluster K-Means model** and display its assigned labels on the t-SNE plot.
+2. **Check data quality.** The dataset contains 24 missing income values and two birth years before 1900. All 2,240 customer records are retained; missing numeric values are median-imputed in the modeling pipeline, and implausible birth years are flagged before deriving age.
+3. **Prepare model features.** Exclude the customer ID and constant fields, derive tenure in days from the latest registration date in the dataset, one-hot encode nominal categories, and robust-scale numeric features.
+4. **Explore the data** with category counts, within-category campaign-response rates, and a correlation heatmap of original numeric features.
+5. **Create the model matrix** with a column-specific preprocessing pipeline and use that same matrix for t-SNE and K-Means.
+6. **Compare candidate cluster counts** for *k* from 2 through 8 using inertia and silhouette score.
+7. **Fit the selected K-Means model**, visualize its labels on the t-SNE projection, and profile clusters using original-scale fields and post-clustering campaign-response rates.
 
 ## Observed findings
 
@@ -53,11 +53,12 @@ These are descriptive observations from the supplied data and one run of the not
 - **Education:** Graduation is the most common category (1,127 customers, about 50%), followed by PhD (486, about 22%) and Master (370, about 17%).
 - **Marital status:** Married (864, about 39%) and Together (580, about 26%) are the largest categories.
 - **Income data quality:** 24 records have missing income. The raw maximum income is 666,666, far above the raw mean of approximately 52,247, and should be investigated as a potential influential outlier.
-- **Cluster size imbalance:** In one five-cluster run, the cluster sizes were 719, 717, 7, 1, and 772. The very small groups suggest that the current model isolates extreme records rather than yielding five similarly sized, stable groups.
-- **Observed spending differences:** In that same run, one large cluster had higher average income and wine and meat spending than the other large clusters. These differences are exploratory and may be driven by the current preprocessing and feature scales.
-- **Choosing *k*:** The elbow curve decreases as more clusters are added, but does not show a clearly decisive elbow. Five clusters should be treated as a provisional choice, not as a uniquely established answer.
+- **Birth-year review:** Two records have birth years before 1900 (1893 and 1899). Their derived ages are marked missing and imputed for modeling; this handling is an explicit analysis assumption, not a confirmed correction to source data.
+- **Cluster selection:** Among the tested values from 2 to 8, *k* = 2 produced the highest silhouette score in the reproducible run (approximately 0.331). The two clusters contained 1,506 (67.2%) and 734 (32.8%) customers.
+- **Observed profile differences:** The larger cluster had average income of about 74,055, wine spending of 584, meat spending of 408, and a response rate of 23.8%. The other cluster had average income of about 41,600, wine spending of 168, meat spending of 49, and a response rate of 10.6%.
+- **Interpretation:** Campaign-response fields were not used to create the clusters; response rates are compared afterward. The differences are descriptive associations and do not show that cluster membership causes campaign response.
 
-The exact cluster labels, sizes, and profiles can vary with the installed scikit-learn version and model initialization defaults. Cluster numbers are arbitrary identifiers; a larger label does not mean a higher-value customer.
+Cluster labels are arbitrary identifiers; a larger label does not mean a higher-value customer. Small numeric differences can occur across dependency versions.
 
 ## What this project teaches
 
@@ -67,30 +68,22 @@ Working through this project highlights several useful lessons in data analysis 
 2. **Preprocessing shapes the model.** K-Means relies on distances. Features with larger numeric ranges can outweigh smaller-scale features unless the actual feature matrix used for clustering is scaled appropriately.
 3. **Encoding is a modeling decision.** Assigning integer codes to nominal categories creates artificial order and distance. Select an encoding strategy that matches the feature meaning and the model.
 4. **Identifiers are not behavioral features.** A customer ID generally identifies a record; it should not be used as evidence that two customers are behaviorally similar.
-5. **Treat visualizations as evidence with limits.** t-SNE is a projection for exploration, not proof of natural segments. Count plots show counts, not necessarily within-category response rates.
+5. **Treat visualizations as evidence with limits.** t-SNE is a projection for exploration, not proof of natural segments. Response-rate plots improve comparisons between categories, but small groups still have less reliable estimates.
 6. **Cluster selection requires judgment.** Inertia always falls when more clusters are added. Use the elbow plot alongside other validation measures, stability checks, cluster sizes, and business interpretability.
 7. **Unsupervised results need human interpretation.** Cluster labels do not explain why customers behave a certain way. Profile clusters with original, understandable fields and validate whether the groups are useful for a clearly defined business question.
 8. **Communicate uncertainty.** A polished analysis should include limitations and next steps, not just plots or a model output.
 
-## Limitations and recommended next steps
+## Limitations and further validation
 
-The current notebook is a useful learning exercise, but its five-cluster output is not yet suitable for customer targeting:
+The notebook addresses the original preprocessing issues, but the result is still exploratory and **should not be used directly for customer targeting**:
 
-- The notebook creates a standardized matrix named `data`, but the t-SNE and K-Means cells use `df` instead. The model therefore uses **unscaled features**.
-- The `ID` column remains in the feature matrix even though it is an identifier.
-- `LabelEncoder` assigns integer values to nominal categories such as education and marital status, which can create misleading distances.
-- The registration date is split into day, month, and year instead of being represented as a meaningful tenure feature.
-- The extreme income value and unusually early birth year should be checked against documented data-quality rules.
-- The five-cluster solution includes very small groups in an observed run. Cluster stability and usefulness have not been established.
-- Campaign-response plots show counts; normalized response rates are needed for fairer comparisons between categories.
+- Robust scaling reduces the influence of extreme values but does not verify or correct the maximum income of 666,666. Confirm unusual values with a data dictionary or source owner.
+- The rule treating birth years before 1900 as implausible is an assumption that should be reviewed with domain context.
+- The highest silhouette score identifies *k* = 2 among the tested candidates, but silhouette alone does not establish that two clusters are stable or commercially useful.
+- t-SNE is a visualization technique; visual separation in its projection is not independent evidence that the segments are reliable.
+- Response-rate differences are observational and may reflect other customer or campaign factors. Small subgroups can also produce less reliable rates.
 
-Recommended improvements:
-
-1. Exclude identifiers and investigate unusual values before fitting the model.
-2. Build an intentional feature matrix, encode categories appropriately, and scale the features actually supplied to K-Means and t-SNE.
-3. Derive registration tenure using a documented reference date.
-4. Reassess the cluster count with multiple diagnostics, such as silhouette scores, cluster-size review, and stability across runs.
-5. Profile validated clusters on human-readable source columns and compare normalized campaign-response rates.
+Recommended next steps are to test cluster stability across resampled data and initializations, review the data-quality rules, compare the segments against a specific marketing use case, and validate any proposed actions before operational use.
 
 ## Run the notebook
 
@@ -111,4 +104,3 @@ Open `main.ipynb` and run the cells from top to bottom. Running from the project
 - **pandas** and **NumPy** for data preparation
 - **Matplotlib** and **Seaborn** for visualization
 - **scikit-learn** for encoding, standardization, t-SNE, and K-Means
-
